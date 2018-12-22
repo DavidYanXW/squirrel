@@ -1,7 +1,7 @@
 <?php
-namespace Rpc\R_server_app;
+namespace Serverapp;
 
-class R_s_string
+class Strproc
 {
 
     /**

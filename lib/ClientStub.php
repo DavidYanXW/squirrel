@@ -22,21 +22,19 @@ class ClientStub
     {
         // 注入
         $this->_client = new \swoole_client(SWOOLE_SOCK_TCP);
-        $this->_client->on("connect", array($this, '_onConnect'));
-        $this->_client->on("receive", array($this, '_onReceive'));
-
-        $this->_client->on("close", function($cli){
-            echo "closed\n";
-        });
-
-        $this->_client->on("error", function($cli){
-            exit("error\n");
-        });
+//        $this->_client->on("connect", array($this, '_onConnect'));
+//        $this->_client->on("receive", array($this, '_onReceive'));
+//        $this->_client->on("close", function($cli){
+//            echo "closed\n";
+//        });
+//        $this->_client->on("error", function($cli){
+//            exit("error\n");
+//        });
 
         // 发起连接
         $this->_client->connect('127.0.0.1', 9601, 0.5);
 
-        $this->bootstrap();
+//        $this->bootstrap();
     }
 
     /**
@@ -44,7 +42,6 @@ class ClientStub
      * @param $cli
      */
     private function _onConnect($cli) {
-//        $cli->send("hello world\n");
         $this->request();
     }
 
@@ -54,9 +51,6 @@ class ClientStub
      * @param $data
      */
     private function _onReceive($cli, $data) {
-//        echo "received: $data\n";
-//        sleep(1);
-//        $cli->send("hello\n");
         $this->_ret = $data;
         $this->_unpack();
         $this->_verify();
@@ -64,11 +58,21 @@ class ClientStub
     }
 
     /**
+     * setter
+     * @param $arg
+     */
+    public function setArg($arg) {
+        $this->_arg = $arg;
+    }
+
+    /**
      * 引导
+     * @todo : $arg
      * @return mixed
      */
     public function bootstrap()
     {
+
         try {
             $this->request();
         }
@@ -97,8 +101,8 @@ class ClientStub
      * 发送信息->rpc server
      */
     private function _callRequest() {
-        $this->_client->send("task limit");
-//        $this->_client->send($this->_packArg);
+        echo "SEND:[{$this->_packArg}]".PHP_EOL;
+        $this->_client->send($this->_packArg);
     }
 
     /**
@@ -112,6 +116,7 @@ class ClientStub
     //请求
     protected function request() 
     {
+        echo "RECEIVE_REQUEST:[".json_encode($this->_arg)."]".PHP_EOL;
         $this->_resolve();
         $this->_verify();
         $this->_pack();
@@ -121,8 +126,35 @@ class ClientStub
     // 取出结果
     public function response()
     {
+        $this->_ret = $this->_client->recv();
+        echo "RECEIVE_REPLY:[{$this->_ret}]".PHP_EOL;
         $this->_unpack();
         $this->_verify();
+        return $this->_unpackRet;
+    }
+
+
+    /**
+     * 组装
+     * @param $service_name
+     * @param $method
+     * @param $param
+     */
+    public function assemble($service_name, $method, $param) {
+        preg_match("/Service\\\(.*)Service/", $service_name, $single_service);
+        // @todo: handle error
+
+
+        $arr = [
+            'service_name' => $single_service[1],
+            'method' => $method,
+            'param' => $param,
+        ];
+        $this->setArg($arr);
+    }
+
+    private function _unassemble() {
+
     }
 
 

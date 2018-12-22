@@ -1,7 +1,7 @@
 <?php
 namespace Rpc\R_server_app;
 
-class R_s_calc
+class Calc
 {
     public function add($a, $b) 
     {

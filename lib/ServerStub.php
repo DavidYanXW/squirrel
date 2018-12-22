@@ -13,8 +13,8 @@ class ServerStub
      * @var null
      */
     const E_SUCCESS = 1000; // 成功
-    const E_SYS_ = 1001;    // 系统级错误
-    const E_SYS_SEC = 1002; // 授权错误
+    const E_SYS_SEC = 1001; // 系统级错误:授权错误
+    const E_SYS_RESOLVE = 1002;    // 系统级错误:请求参数解析错误
     const E_APP_ = 2001;    // 应用级别错误
 
     //raw_data
@@ -31,14 +31,58 @@ class ServerStub
 
     protected $_arg = null;
 
+
+    protected $_tcp_server = null;
+
     // 回调结果
     protected $_invoke_return = null;
 
     //初始化
     // ['auth'=>$str, 'app'=>$app, 'ver'=>$ver, 'method'=>$method, 'arg'=>$arg]
-    public function __construct($msg)
+    public function __construct()
     {
-        $this->_raw_data = $msg;
+
+        $this->_tcp_server = new \Swoole\Server('0.0.0.0', 9601, SWOOLE_PROCESS, SWOOLE_SOCK_TCP);
+        $this->_tcp_server->set([
+            'worker_num' => 4,
+            'daemonize' => false,
+            'log_level' => SWOOLE_LOG_INFO,
+        ]);
+
+        $this->_tcp_server->on('start', [$this, '_onStart']);
+        $this->_tcp_server->on('Connect', array($this, '_onConnect'));
+        $this->_tcp_server->on('Receive', array($this, '_onReceive'));
+        $this->_tcp_server->on('Close', array($this, '_onClose'));
+
+        $this->_tcp_server->start();
+
+    }
+
+    public function _onStart(\Swoole\Server $serv ) {
+        echo "Start\n";
+
+    }
+
+    public function _onConnect(\Swoole\Server $serv, $fd, $reactor_id ) {
+        echo "Hello {$fd}-{$reactor_id}!";
+    }
+
+    public function _onReceive( \Swoole\Server $serv, $fd, $reactor_id, $data ) {
+        $rand = rand(1,100);
+//        usleep($rand);
+
+        $this->_raw_data = $data;
+        $ret = $this->bootstrap();
+
+        // debug info
+        echo "RECEIVE:[{$fd}-{$reactor_id}:{$data}]".PHP_EOL;
+        echo "SEND:[".$ret."]".PHP_EOL;
+
+        $serv->send($fd, $ret);
+    }
+
+    public function _onClose(\Swoole\Server $serv, $fd, $reactor_id ) {
+        echo "Client {$fd}-{$reactor_id} close connection\n";
     }
 
     /**
@@ -58,7 +102,7 @@ class ServerStub
             return $this->_reply();
         }
         catch (\Exception $exception) {
-            return $this->__pack(['code'=>$exception->getCode(), 'msg'=>$exception->getMessage(),'data'=>[]]);
+//            return $this->__pack(['code'=>$exception->getCode(), 'msg'=>$exception->getMessage(),'data'=>[]]);
         }
 
     }
@@ -89,16 +133,18 @@ class ServerStub
     {
         $unpack_data = $this->__unpack($this->_raw_data);
         if($unpack_data === false) {
-            throw new \Exception("unpack data failed", 1001);
+            throw new \Exception("unpack data failed", SELF::E_SYS_RESOLVE);
         }
 
         list ($this->_auth_key, $this->_app, $this->_ver, $this->_method, $this->_arg) = [
-            $unpack_data['auth'],
-            $unpack_data['app'],
-            $unpack_data['ver'],
+            isset($unpack_data['auth'])?$unpack_data['auth']:'',
+            $unpack_data['service_name'],
+            isset($unpack_data['ver'])?$unpack_data['ver']:'',
             $unpack_data['method'],
-            $unpack_data['arg'],
+            $unpack_data['param'],
         ];
+        echo $this->_app.PHP_EOL;
+        $this->_app = "\Serverapp\\".$this->_app;
     }
 
     // 运行
@@ -129,7 +175,7 @@ class ServerStub
     //打包
     private function __pack(array $param) 
     {
-        return serialize($param);
+        return json_encode($param);
     }
 
 
@@ -141,7 +187,9 @@ class ServerStub
      */
     private function __unpack($str)
     {
-        return unserialize($str);
+        return json_decode($str,true);
     }
+
+
 
 }
